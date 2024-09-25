@@ -7,18 +7,30 @@ def generate_combinations(indicator_name, case, input_definitions):
     input_values = []
     for input_def in input_definitions:
         if input_def['constant']:
-            # Format the constant value as int if it's an integer-like float
-            constant_value = int(input_def['value']) if input_def['value'].is_integer() else input_def['value']
+            constant_value = input_def['value']
             input_values.append([constant_value])
         else:
-            start = int(input_def['start'])  # Keep as int
-            end = int(input_def['end'])      # Keep as int
-            step = int(input_def['step'])    # Keep as int
-            input_values.append(list(range(start, end + 1, step)))
+            if input_def['type'] == 'Integer':
+                start = int(input_def['start'])
+                end = int(input_def['end'])
+                step = int(input_def['step'])
+                input_values.append(list(range(start, end + 1, step)))
+            else:
+                start = float(input_def['start'])
+                end = float(input_def['end'])
+                step = float(input_def['step'])
+                input_values.append([round(i, 5) for i in list(drange(start, end, step))])
 
     # Generate all combinations (Cartesian product)
     combinations = list(itertools.product(*input_values))
     return combinations
+
+# Custom range function for float step size
+def drange(start, stop, step):
+    r = start
+    while r <= stop:
+        yield r
+        r += step
 
 # Function to apply conditions to the combinations
 def apply_conditions(combinations, condition):
@@ -39,6 +51,12 @@ def apply_conditions(combinations, condition):
                 valid_combinations.append(combo)
     return valid_combinations
 
+# Function to format float values by replacing '.' with '__'
+def format_value(value):
+    if isinstance(value, float):
+        return str(value).replace('.', '__')
+    return str(value)
+
 # Streamlit App
 st.title("Indicator Combination Generator with Conditions")
 
@@ -55,17 +73,28 @@ for i in range(num_inputs):
     st.subheader(f"Input {i+1}")
     
     constant = st.checkbox(f"Is Input {i+1} constant?", key=f"constant_{i}")
-    
+
+    input_type = st.radio(f"Choose the type for Input {i+1}", ('Integer', 'Float'), key=f"type_{i}")
+
     if constant:
-        # Allow floats for constant values and ensure integer-like values are displayed as integers
-        value = st.number_input(f"Enter the constant value for Input {i+1} (can be float)", key=f"value_{i}", step=0.01, format="%.2f")
-        input_definitions.append({'constant': True, 'value': value})
+        # Allow input as float or integer based on the type
+        if input_type == 'Integer':
+            value = st.number_input(f"Enter the constant value for Input {i+1} (integer)", key=f"value_{i}", step=1, format="%d")
+        else:
+            value = st.number_input(f"Enter the constant value for Input {i+1} (float)", key=f"value_{i}", step=0.01, format="%.5f")
+        input_definitions.append({'constant': True, 'value': value, 'type': input_type})
     else:
-        # Integer inputs for start, end, and step
-        start = st.number_input(f"Enter the starting value for Input {i+1} (integer)", key=f"start_{i}", step=1, format="%d")
-        end = st.number_input(f"Enter the ending value for Input {i+1} (integer)", key=f"end_{i}", step=1, format="%d")
-        step = st.number_input(f"Enter the step size for Input {i+1} (integer)", key=f"step_{i}", min_value=1, value=1, step=1, format="%d")
-        input_definitions.append({'constant': False, 'start': start, 'end': end, 'step': step})
+        # Input for start, end, and step based on type
+        if input_type == 'Integer':
+            start = st.number_input(f"Enter the starting value for Input {i+1} (integer)", key=f"start_{i}", step=1, format="%d")
+            end = st.number_input(f"Enter the ending value for Input {i+1} (integer)", key=f"end_{i}", step=1, format="%d")
+            step = st.number_input(f"Enter the step size for Input {i+1} (integer)", key=f"step_{i}", min_value=1, value=1, step=1, format="%d")
+        else:
+            start = st.number_input(f"Enter the starting value for Input {i+1} (float)", key=f"start_{i}", step=0.01, format="%.5f")
+            end = st.number_input(f"Enter the ending value for Input {i+1} (float)", key=f"end_{i}", step=0.01, format="%.5f")
+            step = st.number_input(f"Enter the step size for Input {i+1} (float)", key=f"step_{i}", min_value=0.01, value=0.01, step=0.01, format="%.5f")
+        
+        input_definitions.append({'constant': False, 'start': start, 'end': end, 'step': step, 'type': input_type})
 
 # Step 4: Define condition between inputs (aligned left to right)
 st.subheader("Define Condition Between Inputs")
@@ -100,7 +129,7 @@ if st.button("Generate Combinations"):
             combinations = apply_conditions(combinations, condition)
         
         # Join combinations as a CSV and add a trailing comma at the end
-        csv_combinations = ", ".join([f"{indicator_name}_{case}_" + "_".join(map(str, combo)) for combo in combinations]) + ','
+        csv_combinations = ", ".join([f"{indicator_name}_{case}_" + "_".join(format_value(value) for value in combo) for combo in combinations]) + ','
 
         # Custom HTML for styled output with copy button
         components.html(
